@@ -81,7 +81,7 @@ def get_user_settings(user_id: int) -> dict:
         "category": "default",
         "filter": "vibrant",
         "platforms": list(TELEGRAM_CONFIG.default_platforms),
-        "whisper_model": "tiny",
+        "whisper_model": "base",
         "language": "auto",
     }
     settings_file = TELEGRAM_CONFIG.user_settings_file

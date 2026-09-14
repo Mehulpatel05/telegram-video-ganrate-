@@ -174,9 +174,14 @@ def cut_clip_portrait(
         "-map", "0:a?",
     ]
 
-    # Optional audio loudness normalization filter
+    # Audio filter chain: EBU R128 loudness normalization + smooth 0.25s fade-in/fade-out
+    af_filters = []
     if normalize_audio:
-        cmd.extend(["-af", get_audio_normalization_filter()])
+        af_filters.append(get_audio_normalization_filter())
+    if duration > 1.0:
+        af_filters.append(f"afade=t=in:ss=0:d=0.25,afade=t=out:st={duration - 0.25:.3f}:d=0.25")
+    if af_filters:
+        cmd.extend(["-af", ",".join(af_filters)])
 
     cmd.extend([
         "-c:v", video_codec,

@@ -30,6 +30,8 @@ from config import (
 )
 from ml_virality_model import get_virality_model
 from semantic_scorer import semantic_score_and_select, ScoredWindow
+from narrative_boundary_model import evaluate_and_refine_boundary
+from multi_genre_intent_model import analyze_genre_intent
 
 logger = logging.getLogger(__name__)
 
@@ -640,61 +642,98 @@ def score_and_select_advanced(
             logger.info("🧠 Running Deep Semantic Scorer (Payoffs, Tactics, Trading & Story Arc)...")
             semantic_windows = semantic_score_and_select(
                 segments=segments,
-                num_clips=num_clips,
+                num_clips=num_clips * 2,  # Get surplus pool for boundary & genre refinement
                 min_duration=min_duration,
                 max_duration=max_duration,
                 min_gap=float(min_gap),
                 total_duration=total_duration,
-                audio_signal=audio_data.get("rms"),
+                audio_signal={"times": audio_data.get("times"), "values": audio_data.get("rms_energy")},
             )
             if semantic_windows:
-                logger.info(f"✅ Semantic Scorer selected {len(semantic_windows)} high-value windows!")
+                logger.info(f"✅ Semantic Scorer found {len(semantic_windows)} high-value windows! Refining boundaries & genre intent...")
                 ml_model = get_virality_model()
                 semantic_candidates: List[ClipCandidate] = []
 
                 for sw in semantic_windows:
-                    # ML virality calculation
+                    window_text = getattr(sw, "quote", "") or getattr(sw, "text", "")
+                    # 1. Narrative Boundary Refinement (Snap to sentence start & punchline end)
+                    boundary = evaluate_and_refine_boundary(
+                        segments=segments,
+                        start_time=sw.start,
+                        end_time=sw.end,
+                        total_duration=total_duration,
+                        min_dur=float(min_duration),
+                        max_dur=float(max_duration),
+                    )
+
+                    # 2. Multi-genre intent analysis
+                    genre_intent = analyze_genre_intent(window_text, target_category=category)
+
+                    # 3. ML virality calculation
+                    sw_total = getattr(sw, "total_score", 0.5)
+                    sw_audio = getattr(sw, "audio_score", 0.5)
+                    sw_reaction = getattr(sw, "reaction_score", 0.5)
+                    sw_density = getattr(sw, "density", 1.0)
+                    sw_content = getattr(sw, "content_score", 0.5)
+
                     feat_vec = ml_model.extract_features(
-                        audio_rms=float(sw.audio_score),
-                        audio_rms_max=float(sw.audio_score),
+                        audio_rms=float(sw_audio),
+                        audio_rms_max=float(sw_audio),
                         audio_rms_std=0.1,
-                        energy_change=float(sw.reaction_score) * 0.5,
-                        speech_density=float(min(1.0, sw.density_score / 3.0)),
+                        energy_change=float(sw_reaction) * 0.5,
+                        speech_density=float(min(1.0, sw_density / 30.0)),
                         speech_pace=0.7,
                         silence_contrast=0.3,
-                        spectral_excitement=float(sw.reaction_score) * 0.6,
+                        spectral_excitement=float(sw_reaction) * 0.6,
                         spectral_max=0.8,
                         beat_strength=0.5,
-                        hook_count=float(sw.content_score) * 2.0,
-                        hook_density=float(min(1.0, sw.content_score / 4.0)),
-                        emotion_score=float(sw.reaction_score),
+                        hook_count=float(sw_content) * 2.0,
+                        hook_density=float(min(1.0, sw_content / 2.0)),
+                        emotion_score=float(sw_reaction),
                         exclamation_density=0.1,
                         question_density=0.1,
                     )
                     ml_pred = ml_model.predict_virality_score(feat_vec)
-                    blended = 0.55 * sw.score + 0.45 * ml_pred
+
+                    # 4. Multi-Model Combined Virality Formula
+                    # Base semantic (40%) + ML Deep Ensemble (30%) + Boundary/Hook/Punchline (15%) + Genre Intent (15%)
+                    combined_score = (
+                        0.40 * sw_total +
+                        0.30 * ml_pred +
+                        0.15 * boundary.boundary_score +
+                        0.15 * (genre_intent.genre_score * genre_intent.category_fit_multiplier)
+                    )
+
+                    refined_dur = boundary.adjusted_end - boundary.adjusted_start
 
                     cand = ClipCandidate(
-                        start_time=round(sw.start, 2),
-                        end_time=round(sw.end, 2),
-                        duration=round(sw.duration, 2),
-                        total_score=round(blended, 4),
-                        audio_energy_score=round(sw.audio_score, 4),
-                        speech_density_score=round(min(1.0, sw.density_score / 3.0), 4),
-                        energy_change_score=round(sw.reaction_score, 4),
+                        start_time=round(boundary.adjusted_start, 2),
+                        end_time=round(boundary.adjusted_end, 2),
+                        duration=round(refined_dur, 2),
+                        total_score=round(combined_score, 4),
+                        audio_energy_score=round(sw_audio, 4),
+                        speech_density_score=round(min(1.0, sw_density / 30.0), 4),
+                        energy_change_score=round(sw_reaction, 4),
                         speech_pace_score=0.7,
                         silence_contrast_score=0.3,
-                        spectral_excitement_score=round(sw.reaction_score * 0.6, 4),
+                        spectral_excitement_score=round(sw_reaction * 0.6, 4),
                         beat_strength_score=0.5,
-                        hook_keywords_score=round(sw.content_score, 4),
-                        emotion_markers_score=round(sw.reaction_score, 4),
+                        hook_keywords_score=round(sw_content, 4),
+                        emotion_markers_score=round(sw_reaction, 4),
                         ml_virality_score=round(ml_pred, 4),
-                        transcript_snippet=sw.text[:150],
+                        transcript_snippet=window_text[:150],
                     )
                     semantic_candidates.append(cand)
 
+                # Deduplicate overlaps with min_gap
                 semantic_candidates.sort(key=lambda c: c.total_score, reverse=True)
-                return semantic_candidates[:num_clips]
+                final_selected = select_top_clips(
+                    candidates=semantic_candidates,
+                    num_clips=num_clips,
+                    min_gap_sec=float(min_gap),
+                )
+                logger.info(f"✨ Selected {len(final_selected)} ultra-smooth narrative-complete clips!")
+                return final_selected
 
         except Exception as sem_err:
             logger.warning(f"Semantic scoring fallback due to: {sem_err}")

@@ -427,7 +427,7 @@ def score_transcript(
 
             # ── Audio (supporting only) ──
             audio_score = 0.5
-            if audio_signal:
+            if audio_signal is not None:
                 audio_score = _audio_energy_in(
                     audio_signal, start_time, end_time
                 )
@@ -486,26 +486,24 @@ def score_transcript(
     return windows
 
 
-def _audio_energy_in(audio_signal: dict, start: float, end: float) -> float:
-    """Window ke andar average audio energy (supporting signal).
-
-    Args:
-        audio_signal: {'times': array-like, 'values': array-like} normalized 0-1.
-        start: Window start (seconds).
-        end: Window end (seconds).
-
-    Returns:
-        Mean energy in [0, 1]; 0.5 agar kuch na mile.
-    """
+def _audio_energy_in(audio_signal, start: float, end: float) -> float:
+    """Window ke andar average audio energy (supporting signal)."""
     try:
-        times = audio_signal.get("times")
-        values = audio_signal.get("values")
-        if times is None or values is None or len(times) == 0:
-            return 0.5
-        picked = [float(v) for t, v in zip(times, values) if start <= float(t) <= end]
-        if not picked:
-            return 0.5
-        return max(0.0, min(1.0, sum(picked) / len(picked)))
+        if isinstance(audio_signal, dict):
+            times = audio_signal.get("times")
+            values = audio_signal.get("values")
+            if values is None:
+                values = audio_signal.get("rms_energy")
+            if times is None or values is None or len(times) == 0:
+                return 0.5
+            picked = [float(v) for t, v in zip(times, values) if start <= float(t) <= end]
+            if not picked:
+                return 0.5
+            return max(0.0, min(1.0, sum(picked) / len(picked)))
+        elif hasattr(audio_signal, "__len__") and len(audio_signal) > 0:
+            import numpy as np
+            return float(np.mean(audio_signal))
+        return 0.5
     except Exception:
         return 0.5
 
