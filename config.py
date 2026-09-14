@@ -155,7 +155,7 @@ class ProcessingConfig:
     sliding_window_step: int = 5         # seconds step for scoring window
 
     # Whisper model settings
-    whisper_model: str = "base"          # tiny, base, small, medium, large-v3
+    whisper_model: str = "tiny"          # tiny, base, small, medium, large-v3
     whisper_device: str = "cpu"          # cpu or cuda
     whisper_compute_type: str = "int8"   # float16, int8, float32
 

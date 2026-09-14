@@ -81,7 +81,7 @@ def get_user_settings(user_id: int) -> dict:
         "category": "default",
         "filter": "vibrant",
         "platforms": list(TELEGRAM_CONFIG.default_platforms),
-        "whisper_model": "base",
+        "whisper_model": "tiny",
         "language": "auto",
     }
     settings_file = TELEGRAM_CONFIG.user_settings_file
@@ -633,7 +633,12 @@ async def process_shorts_request(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.error(f"Shorts pipeline failed: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Oops! Processing mein error aaya.")
+        safe_err = html.escape(str(e))
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"❌ <b>Processing Error:</b> <code>{safe_err[:250]}</code>\n<i>Dobara try karein ya naya link bhejein.</i>",
+            parse_mode="HTML",
+        )
     finally:
         if user_id in active_jobs:
             del active_jobs[user_id]
@@ -763,7 +768,12 @@ async def process_single_video_long_request(update: Update, context: ContextType
 
     except Exception as e:
         logger.error(f"Single long video failed: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Long video processing mein error aaya.")
+        safe_err = html.escape(str(e))
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"❌ <b>Long Video Error:</b> <code>{safe_err[:250]}</code>\n<i>Dobara try karein.</i>",
+            parse_mode="HTML",
+        )
     finally:
         if user_id in active_jobs:
             del active_jobs[user_id]
@@ -783,7 +793,7 @@ async def process_multi_video_long_request(update: Update, context: ContextTypes
         settings = get_user_settings(user_id)
         category = settings.get("category", "default")
         filter_preset = settings.get("filter", get_filter_for_category(category))
-        whisper_model = settings.get("whisper_model", "base")
+        whisper_model = settings.get("whisper_model", "tiny")
         language = settings.get("language", "auto")
 
         status_msg = await context.bot.send_message(
@@ -902,7 +912,12 @@ async def process_multi_video_long_request(update: Update, context: ContextTypes
 
     except Exception as e:
         logger.error(f"Multi-video long merge failed: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Multi-video processing mein error aaya.")
+        safe_err = html.escape(str(e))
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"❌ <b>Multi-Video Error:</b> <code>{safe_err[:250]}</code>\n<i>Dobara try karein.</i>",
+            parse_mode="HTML",
+        )
     finally:
         if user_id in active_jobs:
             del active_jobs[user_id]
