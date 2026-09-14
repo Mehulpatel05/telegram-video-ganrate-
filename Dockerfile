@@ -1,4 +1,4 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 # Install system dependencies & ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -26,4 +26,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Start bot + keepalive webserver
-CMD [python, telegram_bot.py]
+CMD ["python", "telegram_bot.py"]
