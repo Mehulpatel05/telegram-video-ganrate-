@@ -1,0 +1,13 @@
+﻿services:
+  - type: web
+    name: ai-clip-generator-bot
+    runtime: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: PYTHONUTF8
+        value: 1
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false

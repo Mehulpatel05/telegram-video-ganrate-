@@ -1,0 +1,24 @@
+﻿# Large binaries & media
+ffmpeg.exe
+downloads/
+clips/
+logs/
+*.mp4
+*.wav
+*.m4a
+*.webm
+*.part
+*.ytdl
+
+# Python cache & virtualenv
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+venv/
+env/
+.env
+
+# User data
+user_settings.json
